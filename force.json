@@ -1,0 +1,25 @@
+{
+  "nodes": [
+    { "id": "Bert", "group": 1 },
+    { "id": "Alvin", "group": 1 },
+    { "id": "Tom", "group": 1 },
+    { "id": "Jen", "group": 1 },
+    { "id": "Peter", "group": 1 },
+    { "id": "Kelvin", "group": 1 },
+    { "id": "Daniel", "group": 1 },
+    { "id": "NUS", "group": 2 },
+    { "id": "NTU", "group": 2 },
+    { "id": "SMU", "group": 2 }
+  ],
+  "links": [
+    { "source": "Bert", "target": "NUS", "value": 1 },
+    { "source": "Bert", "target": "NTU", "value": 1 },
+    { "source": "Bert", "target": "SMU", "value": 1 },
+    { "source": "Alvin", "target": "NUS", "value": 1 },
+    { "source": "Tom", "target": "NUS", "value": 1 },
+    { "source": "Jen", "target": "NTU", "value": 1 },
+    { "source": "Peter", "target": "NTU", "value": 1 },
+    { "source": "Kelvin", "target": "SMU", "value": 1 },
+    { "source": "Daniel", "target": "SMU", "value": 1 }
+  ]
+}
