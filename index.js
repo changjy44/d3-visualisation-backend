@@ -22,18 +22,9 @@ app.use("/api", (req, res) => {
       const result = await session
         .readTransaction((tx) => {
           // return tx.run("MATCH (p {name:'Shaun Wright-Phillips'}) RETURN p;");
-          const year = Number(req.body.year);
-          console.log(year);
-          const query =
-            /*
-            "MATCH(p1:Player) -[r1:WORKED_AT] -> (c:Club) <-[r2:WORKED_AT]- (p2:Player)" +
-            `WHERE (p1.Name ='${decodeURI(
-              req.body.name
-            )}')  AND (r1.start<=${year}) AND (r1.end >=${year}) AND (r2.start <=${year}) AND (r2.end >=${year})` +
-            "RETURN p1,r1,c,r2,p2";*/
-
-            // "MATCH (p {Name: 'Thiago Neves'}) -[r:WORKED_AT]->(c:Club) RETURN p,r,c";
-            "MATCH(p1:Player) -[r1:WORKED_AT] -> (c:Club) <-[r2:WORKED_AT]- (p2:Player) WHERE (p1.Name ='Thiago Neves') AND (r1.start <= 2015) AND (r2.start <= 2015) RETURN p1,r1,c,r2,p2";
+          // const year = Number(req.body.year);
+          // console.log(year);
+          const query = req.body.query;
           return tx.run(query);
         })
         .then((data) => {
@@ -46,6 +37,8 @@ app.use("/api", (req, res) => {
           //     return entry._fields[1];
           //   })
           // );
+          // console.log(data.records[0]._fields);
+
           if (data.records.length > 0) {
             const targetPlayer = {
               id: data.records[0]._fields[0].properties.Name,
@@ -80,6 +73,15 @@ app.use("/api", (req, res) => {
               return json;
             });
 
+            playerNodes = playerNodes.filter((entry, index) => {
+              for (let i = 0; i < index; i++) {
+                if (playerNodes[i].id === playerNodes[index].id) {
+                  return false;
+                }
+              }
+              return true;
+            });
+
             clubArray.push(targetPlayer);
             clubArray = clubArray.concat(playerNodes);
 
@@ -90,14 +92,121 @@ app.use("/api", (req, res) => {
             //   target: data.records[0]._fields[2].properties.clubName,
             //   value: 1,
             // };
+            let finalNodes = [];
+            let finalPlayerLinks = [];
 
+            function getLabelOrRelation(columnEntry) {
+              if (columnEntry.labels) {
+                return columnEntry.labels[0];
+              } else {
+                return columnEntry.type;
+              }
+            }
+
+            function filterNodes(nodesArray) {
+              nodesArray = nodesArray.filter((entry, index) => {
+                for (let i = 0; i < index; i++) {
+                  if (nodesArray[i].id === nodesArray[index].id) {
+                    return false;
+                  }
+                }
+                return true;
+              });
+              return nodesArray;
+            }
+
+            function filterLinks(linksArray) {
+              linksArray = linksArray.filter((entry, index) => {
+                for (let i = 0; i < index; i++) {
+                  if (
+                    linksArray[i].source === linksArray[index].source &&
+                    linksArray[i].target === linksArray[index].target &&
+                    linksArray[i].startYear === linksArray[index].startYear
+                  ) {
+                    return false;
+                  }
+                }
+                return true;
+              });
+              return linksArray;
+            }
+
+            function editInstanceNumber(linksArray) {
+              linksArray.forEach((entry, index) => {
+                for (let i = 0; i < index; i++) {
+                  if (linksArray[i].source === linksArray[index].source) {
+                    if (linksArray[i].target === linksArray[index].target) {
+                      entry.unique++;
+                      // linksArray[i].unique = false;
+                    }
+
+                    entry.instanceNumber++;
+                  }
+                }
+              });
+              return linksArray;
+            }
+
+            for (let i = 0; i < data.records.length; i++) {
+              const rowEntry = data.records[i]._fields;
+              for (let j = 0; j < rowEntry.length; j++) {
+                const columnEntry = rowEntry[j];
+                const label = getLabelOrRelation(columnEntry);
+                if (label === "WORKED_AT") {
+                  const json = {
+                    source: columnEntry.properties.Name,
+                    target: columnEntry.properties.clubName,
+                    value: 1,
+                    startYear: columnEntry.properties.start.low,
+                    instanceNumber: 1,
+                    unique: 1,
+                  };
+                  finalPlayerLinks.push(json);
+                } else if (label === "Player") {
+                  if (j === 0) {
+                    const json = {
+                      id: columnEntry.properties.Name,
+                      group: 1,
+                      label: label,
+                    };
+                    finalNodes.push(json);
+                  } else {
+                    const json = {
+                      id: columnEntry.properties.Name,
+                      group: 3,
+                      label: label,
+                    };
+                    finalNodes.push(json);
+                  }
+                } else {
+                  const json = {
+                    id: columnEntry.properties.clubName,
+                    group: 2,
+                    label: label,
+                  };
+                  finalNodes.push(json);
+                }
+              }
+            }
+
+            finalNodes = filterNodes(finalNodes);
+            finalPlayerLinks = filterLinks(finalPlayerLinks);
+            // console.log(finalPlayerLinks[99]);
+            finalPlayerLinks = finalPlayerLinks.sort((a, b) => {
+              return a.startYear > b.startYear ? -1 : 1;
+            });
+            // console.log(finalPlayerLinks.map((data) => data.startYear));
+            finalPlayerLinks = editInstanceNumber(finalPlayerLinks);
+            // console.log(finalPlayerLinks);
+            /*
             let targetPlayerLinks = data.records.map((entry) => {
               const json = {
                 source: entry._fields[0].properties.Name,
                 target: entry._fields[2].properties.clubName,
                 value: 1,
-                props: entry._fields[1].properties.start.low,
-                instance: 1,
+                startYear: entry._fields[1].properties.start.low,
+                instanceNumber: 1,
+                unique: true,
               };
               return json;
             });
@@ -106,7 +215,9 @@ app.use("/api", (req, res) => {
               for (let i = 0; i < index; i++) {
                 if (
                   targetPlayerLinks[i].target ===
-                  targetPlayerLinks[index].target
+                    targetPlayerLinks[index].target &&
+                  targetPlayerLinks[i].startYear ===
+                    targetPlayerLinks[index].startYear
                 ) {
                   return false;
                 }
@@ -119,13 +230,25 @@ app.use("/api", (req, res) => {
                 source: entry._fields[4].properties.Name,
                 target: entry._fields[2].properties.clubName,
                 value: 1,
-                props: entry._fields[3].properties.start.low,
-                instance: 1,
+                startYear: entry._fields[3].properties.start.low,
+                instanceNumber: 1,
+                unique: true,
               };
               return json;
             });
 
-            console.log(secondLinksArray);
+            secondLinksArray = secondLinksArray.filter((entry, index) => {
+              for (let i = 0; i < index; i++) {
+                if (
+                  secondLinksArray[i].source === secondLinksArray[index].source
+                ) {
+                  return false;
+                }
+              }
+              return true;
+            });
+
+            // console.log(secondLinksArray);
 
             secondLinksArray = secondLinksArray.concat(targetPlayerLinks);
 
@@ -136,22 +259,37 @@ app.use("/api", (req, res) => {
             secondLinksArray.forEach((entry, index) => {
               for (let i = 0; i < index; i++) {
                 if (
-                  secondLinksArray[i].source === secondLinksArray[index].source
+                  secondLinksArray[i].source ===
+                    secondLinksArray[index].source &&
+                  secondLinksArray[i].target === secondLinksArray[index].target
                 ) {
-                  entry.instance++;
+                  entry.instanceNumber++;
+                  entry.unique = false;
+                  secondLinksArray[i].unique = false;
                 }
               }
             });
 
-            // console.log(secondLinksArray);
+            
+            secondLinksArray = secondLinksArray.filter((entry) => {
+              if (!entry.unique) {
+                nonUniqueLinksArray.push(entry);
+                return false;
+              } else {
+                return true;
+              }
+            });*/
+
+            // console.log(secondLinksArray.length);
 
             // secondLinksArray.push(targetPlayerLink);
-
+            // console.log(clubArray);
             var json = {
               // nodes: [],
-              nodes: clubArray,
+              nodes: finalNodes,
 
-              links: secondLinksArray,
+              links: finalPlayerLinks,
+              // nonUniqueLinks: nonUniqueLinksArray,
             };
 
             res.end(JSON.stringify(json));
